@@ -1,9 +1,14 @@
+import csv
+import io
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Match
+from ..models import Match, User
 from ..schemas import (
     MatchCreate,
     MatchOut,
@@ -11,8 +16,16 @@ from ..schemas import (
     MatchStatusUpdate,
     MatchUpdate,
 )
+from .config import get_or_create_config
+from ..security import get_current_user
 
-router = APIRouter(prefix="/api/matches", tags=["比赛管理"])
+router = APIRouter(
+    prefix="/api/matches",
+    tags=["比赛管理"],
+    dependencies=[Depends(get_current_user)],
+)
+
+STATUS_LABELS = {"pending": "未开始", "ongoing": "进行中", "finished": "已结束"}
 
 
 def get_match_or_404(db: Session, match_id: int) -> Match:
@@ -41,6 +54,60 @@ def list_matches(
         .all()
     )
     return MatchPage(total=total, items=list(items))
+
+
+@router.get("/{match_id}/export", summary="导出比赛成绩 CSV")
+def export_match_results(
+    match_id: int, db: Session = Depends(get_db)
+) -> StreamingResponse:
+    match = get_match_or_404(db, match_id)
+    config = get_or_create_config(db)
+    users = db.scalars(select(User).order_by(User.id)).all()
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "比赛ID",
+            "比赛名称",
+            "比赛状态",
+            "用户ID",
+            "用户名",
+            "报名状态",
+            "初始资金",
+            "当前资金",
+            "收益",
+        ]
+    )
+    for user in users:
+        # 未发放资金（balance 为 0）的用户收益留空
+        profit = (
+            round(user.balance - config.initial_capital, 2) if user.balance else ""
+        )
+        writer.writerow(
+            [
+                match.id,
+                match.name,
+                STATUS_LABELS.get(match.status, match.status),
+                user.id,
+                user.username,
+                "已报名" if user.is_registered else "未报名",
+                f"{config.initial_capital:.2f}",
+                f"{user.balance:.2f}",
+                profit,
+            ]
+        )
+
+    # \ufeff 保证 Excel 打开中文不乱码
+    content = "\ufeff" + buffer.getvalue()
+    filename = f"match_{match.id}_result.csv"
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"
+        },
+    )
 
 
 @router.get("/{match_id}", response_model=MatchOut, summary="比赛详情")

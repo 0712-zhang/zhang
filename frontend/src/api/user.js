@@ -19,3 +19,8 @@ export function updateUser(id, data) {
 export function deleteUser(id) {
   return request.delete(`/users/${id}`)
 }
+
+/** 给所有普通用户批量发放初始资金 */
+export function grantInitialCapital() {
+  return request.post('/users/grant-initial-capital')
+}

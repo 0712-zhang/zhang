@@ -14,7 +14,10 @@
         <el-button type="primary" plain @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
       </div>
-      <el-button type="primary" @click="openCreate">新增用户</el-button>
+      <div class="toolbar-right">
+        <el-button @click="handleGrant">批量发放初始资金</el-button>
+        <el-button type="primary" @click="openCreate">新增用户</el-button>
+      </div>
     </div>
 
     <!-- 用户列表 -->
@@ -33,6 +36,19 @@
             {{ roleLabel(row.role) }}
           </el-tag>
         </template>
+      </el-table-column>
+      <el-table-column label="报名状态" width="110" align="center">
+        <template #default="{ row }">
+          <el-tag
+            :type="row.is_registered ? 'success' : 'info'"
+            disable-transitions
+          >
+            {{ row.is_registered ? '已报名' : '未报名' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="资金" width="150" align="right">
+        <template #default="{ row }">{{ formatMoney(row.balance) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="160" align="center">
         <template #default="{ row }">
@@ -91,6 +107,13 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="报名状态">
+          <el-switch
+            v-model="form.is_registered"
+            active-text="已报名"
+            inactive-text="未报名"
+          />
+        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -110,6 +133,7 @@ import {
   createUser,
   deleteUser,
   fetchUsers,
+  grantInitialCapital,
   updateUser,
 } from '../api/user'
 
@@ -124,6 +148,12 @@ const roleLabel = (role) =>
 const roleTagType = (role) =>
   roleOptions.find((item) => item.value === role)?.tag ?? 'info'
 
+const formatMoney = (value) =>
+  Number(value ?? 0).toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
 const loading = ref(false)
 const submitting = ref(false)
 const users = ref([])
@@ -132,7 +162,12 @@ const query = reactive({ keyword: '', page: 1, page_size: 10 })
 
 const dialogVisible = ref(false)
 const formRef = ref()
-const form = reactive({ id: null, username: '', role: 'user' })
+const form = reactive({
+  id: null,
+  username: '',
+  role: 'user',
+  is_registered: false,
+})
 const isEdit = computed(() => form.id !== null)
 
 const rules = {
@@ -177,6 +212,7 @@ function openCreate() {
   form.id = null
   form.username = ''
   form.role = 'user'
+  form.is_registered = false
   dialogVisible.value = true
 }
 
@@ -184,6 +220,7 @@ function openEdit(row) {
   form.id = row.id
   form.username = row.username
   form.role = row.role
+  form.is_registered = row.is_registered
   dialogVisible.value = true
 }
 
@@ -197,7 +234,11 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    const payload = { username: form.username.trim(), role: form.role }
+    const payload = {
+      username: form.username.trim(),
+      role: form.role,
+      is_registered: form.is_registered,
+    }
     if (isEdit.value) {
       await updateUser(form.id, payload)
       ElMessage.success('编辑成功')
@@ -210,6 +251,24 @@ async function handleSubmit() {
   } finally {
     submitting.value = false
   }
+}
+
+async function handleGrant() {
+  try {
+    await ElMessageBox.confirm(
+      '将按系统配置中的「初始资金」给所有普通用户发放，并覆盖其现有资金，确定继续吗？',
+      '批量发放初始资金',
+      { type: 'warning', confirmButtonText: '发放', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // 用户取消
+  }
+
+  const result = await grantInitialCapital()
+  ElMessage.success(
+    `已为 ${result.updated} 名普通用户发放 ${formatMoney(result.amount)} 元`,
+  )
+  await loadUsers()
 }
 
 async function handleDelete(row) {
@@ -244,6 +303,11 @@ onMounted(loadUsers)
 }
 
 .toolbar-left {
+  display: flex;
+  gap: 12px;
+}
+
+.toolbar-right {
   display: flex;
   gap: 12px;
 }

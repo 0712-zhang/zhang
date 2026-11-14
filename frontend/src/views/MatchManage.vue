@@ -31,7 +31,7 @@
       <el-table-column label="当前轮次" width="110" align="center">
         <template #default="{ row }">第 {{ row.current_round }} 轮</template>
       </el-table-column>
-      <el-table-column label="操作" width="280" align="center" fixed="right">
+      <el-table-column label="操作" width="360" align="center" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
           <el-dropdown
@@ -52,6 +52,9 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+          <el-button link type="success" @click="handleExport(row)">
+            导出成绩
+          </el-button>
           <el-button link type="danger" @click="handleDelete(row)">
             删除
           </el-button>
@@ -135,6 +138,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createMatch,
   deleteMatch,
+  exportMatchResults,
   fetchMatches,
   updateMatch,
   updateMatchStatus,
@@ -249,6 +253,17 @@ async function handleStatusChange(row, status) {
   await updateMatchStatus(row.id, status)
   ElMessage.success(`已将「${row.name}」状态改为「${statusLabel(status)}」`)
   await loadMatches()
+}
+
+async function handleExport(row) {
+  const blob = await exportMatchResults(row.id)
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `比赛${row.id}-成绩.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success('成绩已导出')
 }
 
 async function handleDelete(row) {

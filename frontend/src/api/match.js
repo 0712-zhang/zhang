@@ -20,6 +20,11 @@ export function updateMatchStatus(id, status) {
   return request.put(`/matches/${id}/status`, { status })
 }
 
+/** 导出比赛成绩 CSV（返回 Blob） */
+export function exportMatchResults(id) {
+  return request.get(`/matches/${id}/export`, { responseType: 'blob' })
+}
+
 /** 删除比赛 */
 export function deleteMatch(id) {
   return request.delete(`/matches/${id}`)

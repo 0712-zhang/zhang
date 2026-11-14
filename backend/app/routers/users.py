@@ -4,9 +4,15 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import UserCreate, UserOut, UserPage, UserUpdate
+from ..schemas import GrantResult, UserCreate, UserOut, UserPage, UserUpdate
+from ..security import get_current_user
+from .config import get_or_create_config
 
-router = APIRouter(prefix="/api/users", tags=["用户管理"])
+router = APIRouter(
+    prefix="/api/users",
+    tags=["用户管理"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def get_user_or_404(db: Session, user_id: int) -> User:
@@ -54,6 +60,20 @@ def list_users(
 @router.get("/{user_id}", response_model=UserOut, summary="用户详情")
 def get_user(user_id: int, db: Session = Depends(get_db)) -> User:
     return get_user_or_404(db, user_id)
+
+
+@router.post(
+    "/grant-initial-capital",
+    response_model=GrantResult,
+    summary="给所有普通用户批量发放初始资金",
+)
+def grant_initial_capital(db: Session = Depends(get_db)) -> GrantResult:
+    config = get_or_create_config(db)
+    users = db.scalars(select(User).where(User.role == "user")).all()
+    for user in users:
+        user.balance = config.initial_capital
+    db.commit()
+    return GrantResult(updated=len(users), amount=config.initial_capital)
 
 
 @router.post(
