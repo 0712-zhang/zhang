@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# 数据库（本地数据，不纳入版本管理）
+*.db
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# 备份包
+*.zip
+
+# 编辑器 / 系统
+.vscode/
+.DS_Store
+Thumbs.db
